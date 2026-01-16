@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "docdistillery"
+version = "0.1.0"
+authors = [
+  { name="Bonhollow" },
+]
+description = "A modular Python package to distill large documents and convert structured data into narrative."
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "sentence-transformers",
+    "transformers",
+    "qdrant-client",
+    "pdfplumber",
+    "pandas",
+    "langdetect",
+    "tqdm",
+    "click",
+    "weasyprint",
+    "python-docx",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "ruff",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/bonhollow/docdistillery"
+"Bug Tracker" = "https://github.com/bonhollow/docdistillery/issues"
+
+[project.scripts]
+docdistillery = "pipeline.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["pipeline*"]

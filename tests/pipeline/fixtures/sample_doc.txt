@@ -1,0 +1,7 @@
+This is a sample document for DocDistillery integration tests.
+It contains multiple sentences. 
+This is the third sentence to ensure it can be chunked properly.
+We are testing the end-to-end pipeline from ingestion to summarization.
+Summary should be concise and accurate.
+This document has enough content to occupy more than one chunk if chunk size is small enough.
+Enjoy the distillation process!

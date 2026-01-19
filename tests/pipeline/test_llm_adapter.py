@@ -41,7 +41,7 @@ def test_cloud_adapter_payload(mock_post):
     assert payload["max_tokens"] == 50
     assert payload["temperature"] == 0.7
     # System prompt is at index 0, User prompt at index 1
-    assert payload["messages"][1]["content"] == f"Summarize the following text:\n\nTest prompt"
+    assert payload["messages"][1]["content"] == "Summarize the following text:\n\nTest prompt"
     assert kwargs["headers"]["Authorization"] == "Bearer test_key"
 
 

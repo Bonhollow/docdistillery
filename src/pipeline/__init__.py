@@ -5,7 +5,7 @@ from pipeline.dedup import cluster_embeddings, select_representatives
 from pipeline.embed import Embedder
 from pipeline.exporter import export_summary
 from pipeline.ingest import ingest
-from pipeline.llm_adapter import CloudAdapter, LocalTransformersAdapter
+from pipeline.llm_adapter import CloudAdapter, LocalSummarizationAdapter
 from pipeline.retrieval import Retriever
 from pipeline.strategy import audit_report, compute_doc_stats, select_strategy
 from pipeline.summarize import synthesize
@@ -22,7 +22,7 @@ __all__ = [
     "export_summary",
     "ingest",
     "CloudAdapter",
-    "LocalTransformersAdapter",
+    "LocalSummarizationAdapter",
     "Retriever",
     "audit_report",
     "compute_doc_stats",

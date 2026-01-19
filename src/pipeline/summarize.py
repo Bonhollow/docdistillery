@@ -1,315 +1,270 @@
-import math
+"""
+Document summarization with ordered processing and proportional output.
+
+Key Design Decisions:
+- Process chunks SEQUENTIALLY to preserve document order
+- Use sliding window (3-5 chunks) for better context
+- Target 20-30% output length
+- Apply deduplication AFTER summarization
+"""
+
+import re
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
 
-MICRO_SUMMARY_PROMPT = """You are creating a micro-summary for a larger document synthesis.
-Focus on unique information in this segment that won't be covered in other segments.
-- Include specific facts, examples, and key insights
-- Omit generic statements that could apply to any document
-- Output: 2-4 sentences maximum
-- Be concise but informative
-
-Text segment:
-{text}
-"""
-
-
-INTEGRATION_PROMPT = """You are synthesizing multiple partial summaries into a coherent narrative.
-Merge overlapping information and remove duplicates while preserving all unique insights.
-
-Partial summaries:
-{summaries}
-
-Requirements:
-1. Merge sentences that convey the same information
-2. Remove duplicate facts and repeated phrases
-3. Maintain logical flow between ideas
-4. Preserve all unique insights from every summary
-5. Output as a single cohesive narrative
-6. Use professional, academic tone
-
-Synthesized summary:"""
-
-
-DEDUP_PROMPT = """Remove duplicate information from the following text while preserving all unique insights.
-Combine repeated concepts into single statements.
-
-Text:
-{text}
-
-Output: Clean text without repetition, maintaining all unique information."""
-
-
-SECTION_TITLE_PROMPT = """Generate a brief, descriptive title (3-5 words) for this document section based on its content.
-The title should be informative and specific.
-
-Content summary:
-{summary}
-
-Title:"""
-
-
 class SummarizerAdapter(ABC):
-    """
-    Abstract interface for chunk-level summarizers.
-    """
+    """Abstract interface for chunk-level summarizers."""
 
     @abstractmethod
-    def summarize_chunk(self, text: str, mode: str = "abstractive") -> str:
-        """
-        Summarizes a single text chunk.
-        """
+    def summarize_chunk(self, text: str, target_length: int = 500) -> str:
+        """Summarize a single text chunk."""
         pass
 
 
 class BasicSummarizer(SummarizerAdapter):
-    """
-    Simple implementation that returns the first few sentences.
-    """
+    """Extractive fallback summarizer (no LLM required)."""
 
-    def summarize_chunk(self, text: str, mode: str = "abstractive") -> str:
-        return text[:200] + "..." if len(text) > 200 else text
+    def summarize_chunk(self, text: str, target_length: int = 500) -> str:
+        """Extract key sentences from text."""
+        sentences = re.split(r'(?<=[.!?])\s+', text)
+        
+        # Score sentences by length and position
+        scored = []
+        for i, sent in enumerate(sentences):
+            # Prefer longer sentences and earlier ones
+            score = len(sent.split()) * (1 - i / (len(sentences) + 1) * 0.3)
+            scored.append((score, sent))
+        
+        # Sort by score and take top sentences
+        scored.sort(reverse=True)
+        
+        result = []
+        current_length = 0
+        for _, sent in scored:
+            if current_length + len(sent) > target_length * 4:  # chars approximation
+                break
+            result.append(sent)
+            current_length += len(sent)
+        
+        # Return in original order
+        ordered = [s for s in sentences if s in result]
+        return " ".join(ordered) if ordered else text[:target_length * 4]
 
 
 class LLMSummarizer(SummarizerAdapter):
-    """
-    Abstractive summarizer using an LLM.
-    """
+    """LLM-based abstractive summarizer."""
 
     def __init__(self, llm: "LLMAdapter"):
         self.llm = llm
 
-    def summarize_chunk(self, text: str, mode: str = "abstractive", max_output_tokens: int = 1000) -> str:
-        if mode == "extractive":
-            prompt = f"Identify the most important sentences in this text and return them verbatim:\n\n{text}"
-        else:
-            prompt = MICRO_SUMMARY_PROMPT.format(text=text)
-
-        return self.llm.generate(prompt, max_tokens=max_output_tokens)
+    def summarize_chunk(self, text: str, target_length: int = 500) -> str:
+        """Generate abstractive summary of text."""
+        if not text or len(text.strip()) < 50:
+            return text
+        
+        try:
+            result = self.llm.generate(text, max_tokens=target_length)
+            if result and len(result.strip()) > 20:
+                return result.strip()
+        except Exception:
+            pass
+        
+        # Fallback to extractive
+        return BasicSummarizer().summarize_chunk(text, target_length)
 
 
 class LLMAdapter(ABC):
-    """
-    Abstract interface for LLM-based polishing.
-    """
+    """Abstract interface for LLM-based text generation."""
 
     @abstractmethod
     def generate(self, prompt: str, max_tokens: int, temperature: float = 0.0) -> str:
-        """
-        Generates text from a prompt.
-        """
         pass
 
 
-def count_tokens_approx(text: str) -> int:
-    """
-    Approximates token count using a word-based heuristic (1 word ≈ 1.3 tokens).
-    """
-    words = text.split()
-    return math.ceil(len(words) * 1.3)
+def _deduplicate_text(text: str) -> str:
+    """Remove duplicate sentences from text."""
+    if not text or len(text) < 100:
+        return text
+    
+    sentences = re.split(r'(?<=[.!?])\s+', text)
+    seen = set()
+    unique = []
+    
+    for sent in sentences:
+        # Normalize for comparison
+        normalized = sent.lower().strip()
+        if len(normalized) < 20:
+            unique.append(sent)
+            continue
+        
+        # Check for duplicates
+        is_dup = False
+        for seen_sent in seen:
+            # Check substring containment
+            if normalized in seen_sent or seen_sent in normalized:
+                is_dup = True
+                break
+        
+        if not is_dup:
+            unique.append(sent)
+            seen.add(normalized)
+    
+    return " ".join(unique)
 
 
-def _generate_section_title(content: str, llm: Optional[LLMAdapter] = None) -> str:
-    """
-    Generate a descriptive title for a section based on its content.
-
-    Args:
-        content: The section content.
-        llm: Optional LLM for title generation.
-
-    Returns:
-        A brief, descriptive title.
-    """
-    if llm is None:
-        return "Summary"
-
-    try:
-        prompt = SECTION_TITLE_PROMPT.format(summary=content[:500])
-        title = llm.generate(prompt, max_tokens=20)
-        title = title.strip().strip('"').strip("'")
-        if len(title) > 50:
-            title = title[:50] + "..."
-        return title if title else "Summary"
-    except Exception:
-        return "Summary"
-
-
-def group_chunks_by_similarity(
-    chunks: List[Dict[str, Any]],
-    embeddings: Optional["np.ndarray"] = None,
-    max_groups: int = 10,
-    similarity_threshold: float = 0.85,
-) -> List[List[Dict[str, Any]]]:
-    """
-    Group semantically related chunks together using embeddings.
-    Creates a fixed number of groups for consistent output.
-
-    Args:
-        chunks: List of chunk dictionaries.
-        embeddings: Pre-computed embeddings for chunks.
-        max_groups: Maximum number of groups to create.
-        similarity_threshold: Minimum similarity to group chunks together.
-
-    Returns:
-        List of groups, where each group is a list of related chunks.
-    """
-    if len(chunks) <= 1:
-        return [chunks] if chunks else []
-
-    if embeddings is None:
-        n = len(chunks)
-        group_size = max(1, n // max_groups)
-        return [chunks[i : i + group_size] for i in range(0, n, group_size)]
-
-    try:
-        import numpy as np
-        from sklearn.cluster import KMeans
-
-        n = len(chunks)
-        n_clusters = min(max_groups, n)
-
-        kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init="auto")
-        labels = kmeans.fit_predict(embeddings)
-
-        clusters = {}
-        for idx, label in enumerate(labels):
-            if label not in clusters:
-                clusters[label] = []
-            clusters[label].append(idx)
-
-        groups = []
-        for label in sorted(clusters.keys()):
-            indices = clusters[label]
-            group = [chunks[idx] for idx in indices]
-            groups.append(group)
-
-        return groups
-
-    except Exception:
-        n = len(chunks)
-        group_size = max(1, n // max_groups)
-        return [chunks[i : i + group_size] for i in range(0, n, group_size)]
-
-    try:
-        import numpy as np
-
-        n = len(chunks)
-        similarity_matrix = np.dot(embeddings, embeddings.T)
-
-        visited = [False] * n
-        groups = []
-
-        for i in range(n):
-            if visited[i]:
-                continue
-
-            group = [i]
-            visited[i] = True
-
-            similarities = similarity_matrix[i]
-
-            for j in range(i + 1, n):
-                if not visited[j] and similarities[j] > 0.75:
-                    if len(group) < max_group_size:
-                        group.append(j)
-                        visited[j] = True
-
-            groups.append([chunks[idx] for idx in group])
-
-        for i in range(n):
-            if not visited[i]:
-                groups.append([chunks[i]])
-                visited[i] = True
-
-        return groups
-
-    except Exception:
-        return [chunks]
+def _ensure_complete_sentences(text: str) -> str:
+    """Ensure text ends with complete sentences."""
+    if not text:
+        return text
+    
+    # Find the last sentence boundary
+    last_period = text.rfind('. ')
+    last_question = text.rfind('? ')
+    last_exclaim = text.rfind('! ')
+    
+    cut_pos = max(last_period, last_question, last_exclaim)
+    
+    if cut_pos > len(text) * 0.7:
+        return text[:cut_pos + 1].strip()
+    
+    # If text already ends with punctuation, keep it
+    if text.rstrip()[-1] in '.!?':
+        return text.rstrip()
+    
+    return text
 
 
 def synthesize(
     chunks: List[Dict[str, Any]],
     summarizer: Optional[SummarizerAdapter] = None,
-    mode: str = "abstractive",
-    llm: Optional[LLMAdapter] = None,
-    target_tokens: int = 8000,
+    llm: Optional["LLMAdapter"] = None,
     detail_level: str = "standard",
-    embeddings: Optional["np.ndarray"] = None,
+    mode: str = "abstractive",
+    target_tokens: int = 8000,
+    embeddings: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """
-    Summarizes document chunks into a structured synthesis.
-    Produces comprehensive output while avoiding excessive repetition.
-
+    Synthesize document chunks into a structured summary.
+    
+    Key Features:
+    - Processes chunks in document order (no clustering)
+    - Uses sliding window for context
+    - Targets 20-30% output length
+    - Deduplicates after generation
+    
     Args:
-        chunks: Chunks with 'chunk_id' and 'text'.
-        summarizer: Adapter for micro-summaries.
-        mode: 'abstractive' or 'extractive'.
-        llm: Optional LLM for final polishing.
-        target_tokens: Soft upper bound for the final summary length.
-        detail_level: 'brief', 'standard', or 'detailed'.
-        embeddings: Optional pre-computed embeddings for grouping.
-
+        chunks: List of chunks with 'text' and 'chunk_id'
+        summarizer: Adapter for chunk summarization
+        llm: LLM adapter for polish/TLDR
+        detail_level: "brief", "standard", or "detailed"
+        mode: "abstractive" or "extractive"
+        target_tokens: Soft limit for output tokens
+        embeddings: Ignored (kept for compatibility)
+    
     Returns:
-        Structured summary with TL;DR, sections, and provenance.
+        Dict with 'tldr', 'executive', 'sections', 'provenance'
     """
     if not chunks:
         return {"tldr": "", "executive": [], "sections": [], "provenance": {}}
-
+    
     if summarizer is None:
         summarizer = BasicSummarizer()
-
-    max_chunk_tokens = 500 if detail_level == "detailed" else 300
-
-    n_groups = 5 if detail_level == "brief" else (8 if detail_level == "standard" else 12)
-    groups = group_chunks_by_similarity(chunks, embeddings, max_groups=n_groups)
-
-    group_summaries = []
+    
+    # Configuration based on detail level
+    config = {
+        "brief": {"window_size": 5, "target_ratio": 0.15, "max_sections": 8},
+        "standard": {"window_size": 3, "target_ratio": 0.25, "max_sections": 15},
+        "detailed": {"window_size": 2, "target_ratio": 0.35, "max_sections": 30},
+    }
+    cfg = config.get(detail_level, config["standard"])
+    
+    # Calculate input size
+    total_input_chars = sum(len(c.get("text", "")) for c in chunks)
+    target_output_chars = int(total_input_chars * cfg["target_ratio"])
+    chars_per_section = max(500, target_output_chars // cfg["max_sections"])
+    
+    # Process chunks in order using sliding window
+    sections = []
     provenance = {}
-
-    for group_idx, group in enumerate(groups):
-        group_texts = [c.get("text", "") for c in group]
-        combined_text = " ".join(group_texts)
-
-        if isinstance(summarizer, LLMSummarizer):
-            micro_summary = summarizer.summarize_chunk(combined_text, mode=mode, max_output_tokens=max_chunk_tokens)
-        else:
-            micro_summary = summarizer.summarize_chunk(combined_text, mode=mode)
-
-        chunk_ids = [c.get("chunk_id", f"unknown_{i}") for i, c in enumerate(group)]
-        provenance[f"section_{group_idx + 1}"] = chunk_ids
-        group_summaries.append(micro_summary)
-
-    if llm and len(group_summaries) > 1:
+    window_size = cfg["window_size"]
+    
+    i = 0
+    while i < len(chunks):
+        # Get window of chunks
+        window_end = min(i + window_size, len(chunks))
+        window_chunks = chunks[i:window_end]
+        
+        # Combine text from window
+        combined_text = " ".join(c.get("text", "") for c in window_chunks)
+        
+        if not combined_text.strip():
+            i += window_size
+            continue
+        
+        # Calculate target length for this section
+        target_length = min(chars_per_section // 4, 800)  # Convert to words approx
+        
+        # Generate summary for this window
         try:
-            combined_summaries = "\n\n".join(group_summaries)
-
-            final_sections = []
-            for idx, summary in enumerate(group_summaries):
-                title = f"Section {idx + 1}"
-                final_sections.append({"title": title, "content": summary})
-
-            combined_all = " ".join(group_summaries)
-            tldr = llm.generate(
-                "Create a very brief TL;DR (1-2 sentences, max 30 words) capturing the main topic: "
-                + combined_all[:2000],
-                max_tokens=50,
-            )
-
-            exec_summary = llm.generate(
-                "Create a concise executive summary (3-5 bullet points) covering all key themes. Use professional tone:\n\n"
-                + combined_all[:3000],
-                max_tokens=300,
-            )
-            executive = [s.strip() for s in exec_summary.split("\n") if s.strip() and len(s.strip()) > 10]
-
+            if isinstance(summarizer, LLMSummarizer):
+                summary = summarizer.summarize_chunk(combined_text, target_length=target_length)
+            else:
+                summary = summarizer.summarize_chunk(combined_text, target_length=target_length)
         except Exception:
-            final_sections = [{"title": f"Section {i + 1}", "content": s} for i, s in enumerate(group_summaries)]
-            tldr = group_summaries[0][:100] if group_summaries else ""
-            executive = group_summaries[:5]
-    else:
-        final_sections = [{"title": f"Section {i + 1}", "content": s} for i, s in enumerate(group_summaries)]
-        tldr = group_summaries[0][:100] if group_summaries else ""
-        executive = group_summaries[:5]
-
-    return {"tldr": tldr, "executive": executive, "sections": final_sections, "provenance": provenance}
+            summary = combined_text[:chars_per_section]
+        
+        # Ensure complete sentences
+        summary = _ensure_complete_sentences(summary)
+        
+        if summary and len(summary.strip()) > 10:
+            section_num = len(sections) + 1
+            sections.append({
+                "title": f"Section {section_num}",
+                "content": summary
+            })
+            
+            # Track provenance
+            chunk_ids = [c.get("chunk_id", f"chunk_{j}") for j, c in enumerate(window_chunks)]
+            provenance[f"section_{section_num}"] = chunk_ids
+        
+        i += window_size
+    
+    if not sections:
+        return {"tldr": "", "executive": [], "sections": [], "provenance": {}}
+    
+    # Deduplicate sections
+    for section in sections:
+        section["content"] = _deduplicate_text(section["content"])
+    
+    # Generate executive summary (sample from across document)
+    n_exec = min(5, len(sections))
+    step = max(1, len(sections) // n_exec)
+    exec_indices = [i * step for i in range(n_exec)]
+    executive = [sections[i]["content"][:500] for i in exec_indices if i < len(sections)]
+    
+    # Generate TLDR
+    tldr = ""
+    if llm and sections:
+        try:
+            # Combine all section summaries for TLDR
+            combined = " ".join(s["content"][:300] for s in sections[:10])
+            tldr = llm.generate(
+                f"Create a 2-3 sentence summary of this document: {combined[:3000]}",
+                max_tokens=100
+            )
+        except Exception:
+            pass
+    
+    if not tldr:
+        # Fallback TLDR
+        tldr = sections[0]["content"][:200] if sections else ""
+        if not tldr.rstrip().endswith(('.', '!', '?')):
+            tldr = _ensure_complete_sentences(tldr)
+    
+    return {
+        "tldr": tldr,
+        "executive": executive,
+        "sections": sections,
+        "provenance": provenance
+    }

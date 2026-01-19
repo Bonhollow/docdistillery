@@ -31,6 +31,50 @@ docdistillery summarize --input report.pdf --no-save
 
 ---
 
+## Hardware Requirements & Performance
+
+DocDistillery supports a range of hardware configurations. Performance and model selection depend on available resources:
+
+### Minimum Requirements
+- **CPU**: Dual-core processor
+- **RAM**: 8GB
+- **Storage**: 2GB free space
+- **Device**: Standard office laptop (e.g., MacBook Air, Dell XPS 13)
+
+### Recommended for Local LLMs
+- **CPU**: Quad-core or better (Apple M1/M2/M3 recommended)
+- **RAM**: 16GB+
+- **Model Selection**:
+  - **8GB RAM**: Use `google/flan-t5-small` or Cloud LLMs
+  - **16GB+ RAM**: Use `facebook/bart-large-cnn` (Default) or `pszemraj/led-base-book-summary` for long docs
+
+> **Note**: First-time runs may take longer as models are downloaded and cached.
+
+### Recommended Workflows
+
+#### ⚡ Low Resource (8GB RAM / Intel Chips)
+Use the `sequential` strategy and `standard` detail to conserve memory. Cloud LLMs are best here if available.
+```bash
+# Local (lightweight)
+docdistillery summarize --input doc.pdf --strategy sequential --detail standard --no-save
+
+# Cloud (best quality for low RAM)
+export CLOUD_LLM_API_KEY="sk-..."
+docdistillery summarize --input doc.pdf --llm cloud --model gpt-3.5-turbo
+```
+
+#### 🚀 High Performance (16GB+ RAM / Apple Silicon)
+Leverage local power for maximum privacy and detail.
+```bash
+# High Detail Local Summarization
+docdistillery summarize --input large_doc.pdf --detail detailed --format pdf --out summary.pdf
+
+# Long Document Mode (using LED approximation via sliding window)
+docdistillery summarize --input book.pdf --detail detailed --strategy sequential
+```
+
+---
+
 ## CLI Usage
 
 DocDistillery provides a unified CLI for end-to-end processing.
@@ -89,9 +133,9 @@ print(md_text)
 
 ### Summarization Strategies
 
-- **Sequential**: Processes chunks in document order. Best for short, linear narratives.
-- **Clustered**: Uses HDBSCAN/K-Means to group similar information and selects representative chunks. Best for large, redundant documents.
-- **Auto**: Heuristically selects the strategy based on document size and redundancy scores.
+- **Sequential** (Recommended): Processes chunks in document order using a sliding window. Best for coherence and stability.
+- **Clustered**: Uses HDBSCAN/K-Means to group similar information. Best for highly redundant documents (requires `scikit-learn` and may be unstable on some systems).
+- **Auto**: Switches between sequential and clustered based on document size.
 
 ### Guarantees & Auditing
 
@@ -103,9 +147,11 @@ DocDistillery provides tools to verify information coverage:
 ### LLM Options & Privacy
 
 DocDistillery is LLM-agnostic:
-- **Local**: Uses HuggingFace `transformers` (e.g., `google/flan-t5-small`). Data never leaves your machine.
+- **Local** (Default): Uses HuggingFace `transformers`.
+  - default: `facebook/bart-large-cnn` (Stable, high quality, max 1024 tokens)
+  - long docs: `pszemraj/led-base-book-summary` (Experimental, max 16k tokens)
 - **Cloud**: Connects to OpenAI-compatible APIs. Requires `CLOUD_LLM_API_KEY`.
-- **Privacy Warning**: Sending sensitive or proprietary documents to cloud LLMs may violate your data policy. Always prefer `LocalTransformersAdapter` for sensitive data.
+- **Privacy Warning**: Sending sensitive or proprietary documents to cloud LLMs may violate your data policy. Always prefer local models for sensitive data.
 
 ### Output Options
 

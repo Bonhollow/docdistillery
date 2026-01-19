@@ -85,7 +85,7 @@ def summarize(input, mode, strategy, llm, model, out, format, detail, query, no_
     from pipeline.embed import Embedder
     from pipeline.exporter import export_summary
     from pipeline.ingest import ingest
-    from pipeline.llm_adapter import CloudAdapter, LocalTransformersAdapter
+    from pipeline.llm_adapter import CloudAdapter, LocalSummarizationAdapter
     from pipeline.retrieval import Retriever
     from pipeline.strategy import compute_doc_stats, recommend_chunking, select_strategy
     from pipeline.summarize import LLMSummarizer, synthesize
@@ -99,8 +99,38 @@ def summarize(input, mode, strategy, llm, model, out, format, detail, query, no_
             sys.exit(2)
 
         embedder = Embedder()
-        pages_per_chunk = 15 if detail == "detailed" else (10 if detail == "standard" else 5)
-        max_chunk_chars = 25000 if detail == "detailed" else (20000 if detail == "standard" else 15000)
+
+        if llm == "cloud":
+            adapter = CloudAdapter(model_name=model or "gpt-3.5-turbo")
+            if adapter.api_key == "PLACEHOLDER_KEY":
+                click.echo("Warning: CLOUD_LLM_API_KEY not set. Falling back to local.", err=True)
+                llm_obj = None
+                use_cloud = False
+            else:
+                llm_obj = adapter
+                use_cloud = True
+        else:
+            try:
+                # Use BART model for stable summarization
+                llm_obj = LocalSummarizationAdapter(model_name=model or "facebook/bart-large-cnn")
+                use_cloud = False
+            except ImportError:
+                click.echo(
+                    "Warning: 'transformers' not found. Using basic summarizer. Install with 'pip install transformers torch'.",
+                    err=True,
+                )
+                llm_obj = None
+                use_cloud = False
+
+        if use_cloud:
+            pages_per_chunk = 15 if detail == "detailed" else (12 if detail == "standard" else 8)
+            max_chunk_chars = 30000 if detail == "detailed" else (25000 if detail == "standard" else 15000)
+        else:
+            pages_per_chunk = 8 if detail == "detailed" else (6 if detail == "standard" else 4)
+            max_chunk_chars = 12000 if detail == "detailed" else (10000 if detail == "standard" else 8000)
+
+        summarizer = LLMSummarizer(llm_obj) if llm_obj else None
+
         chunks = chunk_pages(
             data["pages"], doc_id=doc_id, chunk_size_chars=max_chunk_chars, pages_per_chunk=pages_per_chunk
         )
@@ -139,27 +169,6 @@ def summarize(input, mode, strategy, llm, model, out, format, detail, query, no_
                             if c.get("chunk_id") == r["chunk_id"]:
                                 final_chunks.append(c)
                                 break
-
-        if llm == "cloud":
-            adapter = CloudAdapter(model_name=model or "gpt-3.5-turbo")
-            if adapter.api_key == "PLACEHOLDER_KEY":
-                click.echo("Warning: CLOUD_LLM_API_KEY not set. Falling back to local/basic.", err=True)
-                llm_obj = None
-                summarizer = None
-            else:
-                llm_obj = adapter
-                summarizer = LLMSummarizer(llm_obj)
-        else:
-            try:
-                llm_obj = LocalTransformersAdapter(model_name=model or "google/flan-t5-small")
-                summarizer = LLMSummarizer(llm_obj)
-            except ImportError:
-                click.echo(
-                    "Warning: 'transformers' not found. Using basic trimmer. Install it with 'pip install transformers torch'.",
-                    err=True,
-                )
-                llm_obj = None
-                summarizer = None
 
         new_embeddings = (
             embedder.embed_texts([c["text"] for c in final_chunks]) if len(final_chunks) != len(chunks) else embeddings

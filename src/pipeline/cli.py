@@ -87,7 +87,7 @@ def summarize(input, mode, strategy, llm, model, out, format, detail, query, no_
     from pipeline.ingest import ingest
     from pipeline.llm_adapter import CloudAdapter, LocalSummarizationAdapter
     from pipeline.retrieval import Retriever
-    from pipeline.strategy import compute_doc_stats, recommend_chunking, select_strategy
+    from pipeline.strategy import compute_doc_stats, select_strategy
     from pipeline.summarize import LLMSummarizer, synthesize
 
     try:
@@ -116,7 +116,8 @@ def summarize(input, mode, strategy, llm, model, out, format, detail, query, no_
                 use_cloud = False
             except ImportError:
                 click.echo(
-                    "Warning: 'transformers' not found. Using basic summarizer. Install with 'pip install transformers torch'.",
+                    "Warning: 'transformers' not found. Using basic summarizer. "
+                    "Install with 'pip install transformers torch'.",
                     err=True,
                 )
                 llm_obj = None
@@ -141,7 +142,7 @@ def summarize(input, mode, strategy, llm, model, out, format, detail, query, no_
         if strategy == "auto":
             strategy = select_strategy(stats, query=query)
 
-        chunking_config = recommend_chunking(strategy, len(data.get("pages", [])), stats)
+        # chunking_config = recommend_chunking(strategy, len(data.get("pages", [])), stats)
 
         if strategy == "insight_driven" or strategy == "clustered":
             if len(chunks) > 1:
@@ -153,6 +154,8 @@ def summarize(input, mode, strategy, llm, model, out, format, detail, query, no_
             final_chunks = chunks
 
         if strategy == "insight_driven" and query:
+            from pipeline.vectordb import InMemoryAdapter
+
             db = InMemoryAdapter()
             db.upsert_chunks("temp", final_chunks, embedder.embed_texts([c["text"] for c in final_chunks]))
 
@@ -199,6 +202,7 @@ def summarize(input, mode, strategy, llm, model, out, format, detail, query, no_
 def csv2story(input, tone, out):
     """Extract insights from CSV and build a narrative story."""
     import pandas as pd
+
     from pipeline.csv2story import build_story
     from pipeline.csv_insights import extract_insights, insights_to_atomic_phrases
 

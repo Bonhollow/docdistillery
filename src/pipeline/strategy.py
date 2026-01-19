@@ -1,6 +1,9 @@
 import math
 import random
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+if TYPE_CHECKING:
+    import numpy as np
 
 
 def compute_doc_stats(chunks: List[Dict[str, Any]], embeddings: Optional["np.ndarray"] = None) -> Dict[str, Any]:

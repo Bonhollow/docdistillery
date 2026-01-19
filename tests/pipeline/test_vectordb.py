@@ -17,11 +17,13 @@ def test_in_memory_adapter_basic():
         {"chunk_id": "2", "meta": "p2"},
         {"chunk_id": "3", "meta": "p3"},
     ]
-    embeddings = np.array([
-        [1.0, 0.0, 0.0, 0.0],
-        [0.0, 1.0, 0.0, 0.0],
-        [0.9, 0.1, 0.0, 0.0],
-    ])
+    embeddings = np.array(
+        [
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0, 0.0],
+            [0.9, 0.1, 0.0, 0.0],
+        ]
+    )
     db.upsert_chunks(collection, chunks, embeddings)
 
     # Search for [1, 0, 0, 0]
@@ -41,6 +43,7 @@ def test_in_memory_adapter_upsert_update():
     db.create_collection(collection, 2)
 
     import numpy as np
+
     db.upsert_chunks(collection, [{"chunk_id": "v1", "val": 1}], np.array([[1.0, 0.0]]))
     db.upsert_chunks(collection, [{"chunk_id": "v1", "val": 2}], np.array([[0.0, 1.0]]))
 
@@ -64,6 +67,7 @@ def test_qdrant_adapter_smoke():
     db.create_collection(collection, 3)
 
     import numpy as np
+
     db.upsert_chunks(
         collection,
         [{"chunk_id": "00000000-0000-0000-0000-000000000001", "tag": "first"}],

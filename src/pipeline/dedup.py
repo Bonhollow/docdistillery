@@ -1,4 +1,7 @@
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+if TYPE_CHECKING:
+    import numpy as np
 
 
 def cluster_embeddings(embeddings: "np.ndarray", method: str = "hdbscan", params: Optional[dict] = None) -> List[int]:
@@ -13,7 +16,6 @@ def cluster_embeddings(embeddings: "np.ndarray", method: str = "hdbscan", params
     Returns:
         List[int]: Cluster labels for each embedding.
     """
-    import numpy as np
 
     if len(embeddings) == 0:
         return []

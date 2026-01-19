@@ -26,7 +26,7 @@ class LocalSummarizationAdapter(LLMAdapter):
 
         self.model_name = model_name
         self.device = device
-        
+
         # Use summarization pipeline
         self.pipeline = pipeline(
             "summarization",
@@ -44,11 +44,11 @@ class LocalSummarizationAdapter(LLMAdapter):
         """
         # Ensure we don't exceed model limits
         input_length = len(prompt.split())
-        
+
         # Adjust min/max length based on input
         min_length = min(50, max(10, input_length // 10))
         max_length = min(max_tokens, max(100, input_length // 3))
-        
+
         try:
             results = self.pipeline(
                 prompt,
@@ -58,9 +58,9 @@ class LocalSummarizationAdapter(LLMAdapter):
                 truncation=True,
             )
             return results[0]["summary_text"]
-        except Exception as e:
+        except Exception:
             # If summarization fails, return truncated input
-            return prompt[:max_tokens * 4] + "..."
+            return prompt[: max_tokens * 4] + "..."
 
 
 # Backwards compatibility alias
@@ -82,13 +82,16 @@ class CloudAdapter(LLMAdapter):
         headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self.api_key}"}
 
         # For summarization, wrap in a system prompt
-        system_prompt = "You are a professional summarizer. Create comprehensive, well-structured summaries that preserve key details and maintain document order."
-        
+        system_prompt = (
+            "You are a professional summarizer. Create comprehensive, well-structured summaries "
+            "that preserve key details and maintain document order."
+        )
+
         payload = {
             "model": self.model_name,
             "messages": [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Summarize the following text:\n\n{prompt}"}
+                {"role": "user", "content": f"Summarize the following text:\n\n{prompt}"},
             ],
             "max_tokens": max_tokens,
             "temperature": temperature,

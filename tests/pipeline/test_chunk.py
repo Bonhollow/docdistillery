@@ -1,4 +1,4 @@
-from pipeline.chunk import chunk_pages, chunk_text
+from pipeline.chunk import chunk_text
 
 
 def test_chunk_text_basic():

@@ -1,4 +1,7 @@
-from typing import List, Optional
+from typing import TYPE_CHECKING, List
+
+if TYPE_CHECKING:
+    import numpy as np
 
 
 class Embedder:

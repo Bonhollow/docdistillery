@@ -1,5 +1,8 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List
+
+if TYPE_CHECKING:
+    import numpy as np
 
 try:
     from qdrant_client import QdrantClient
@@ -20,9 +23,7 @@ class VectorDB(ABC):
         pass
 
     @abstractmethod
-    def upsert_chunks(
-        self, collection: str, chunks: List[Dict[str, Any]], embeddings: "np.ndarray"
-    ) -> None:
+    def upsert_chunks(self, collection: str, chunks: List[Dict[str, Any]], embeddings: "np.ndarray") -> None:
         """Helper to upsert matched chunks and embeddings."""
         pass
 
@@ -59,6 +60,7 @@ class InMemoryAdapter(VectorDB):
 
     def upsert_chunks(self, collection: str, chunks: List[Dict[str, Any]], embeddings: "np.ndarray") -> None:
         import numpy as np
+
         if collection not in self.collections:
             raise ValueError(f"Collection '{collection}' not found.")
 
@@ -79,6 +81,7 @@ class InMemoryAdapter(VectorDB):
 
     def search(self, collection: str, query_vector: List[float], limit: int = 10) -> List[Dict[str, Any]]:
         import numpy as np
+
         if collection not in self.collections:
             raise ValueError(f"Collection '{collection}' not found.")
 
@@ -114,7 +117,6 @@ class InMemoryAdapter(VectorDB):
 
 try:
     from qdrant_client import QdrantClient
-    from qdrant_client.models import Distance, PointStruct, VectorParams
 
     HAS_QDRANT = True
 except ImportError:
@@ -151,9 +153,7 @@ class QdrantAdapter(VectorDB):
             vectors_config=VectorParams(size=vector_size, distance=q_dist),
         )
 
-    def upsert_chunks(
-        self, collection: str, chunks: List[Dict[str, Any]], embeddings: "np.ndarray"
-    ) -> None:
+    def upsert_chunks(self, collection: str, chunks: List[Dict[str, Any]], embeddings: "np.ndarray") -> None:
         if not HAS_QDRANT:
             raise ImportError("qdrant-client is not installed.")
         from qdrant_client.models import PointStruct
@@ -161,9 +161,7 @@ class QdrantAdapter(VectorDB):
         points = []
         for i, chunk in enumerate(chunks):
             p_id = chunk.get("chunk_id", chunk.get("id"))
-            points.append(
-                PointStruct(id=p_id, vector=embeddings[i].tolist(), payload=chunk)
-            )
+            points.append(PointStruct(id=p_id, vector=embeddings[i].tolist(), payload=chunk))
         self.client.upsert(collection_name=collection, points=points)
 
     def search(self, collection: str, query_vector: List[float], limit: int = 10) -> List[Dict[str, Any]]:

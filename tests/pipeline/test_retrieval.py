@@ -41,11 +41,13 @@ def setup_retriever():
         {"chunk_id": "2", "text": "very long text"},  # len 14
         {"chunk_id": "3", "text": "medium text"},  # len 11
     ]
-    embeddings = np.array([
-        [10.0, 0.0],
-        [11.0, 0.0],
-        [12.0, 0.0],
-    ])
+    embeddings = np.array(
+        [
+            [10.0, 0.0],
+            [11.0, 0.0],
+            [12.0, 0.0],
+        ]
+    )
     db.upsert_chunks(collection, chunks, embeddings)
 
     embedder = MockEmbedder()

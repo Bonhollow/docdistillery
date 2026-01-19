@@ -1,4 +1,7 @@
-from typing import Any, Dict, List
+from typing import TYPE_CHECKING, Any, Dict, List
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 
 def extract_insights(df: "pd.DataFrame") -> List[Dict[str, Any]]:
@@ -12,7 +15,6 @@ def extract_insights(df: "pd.DataFrame") -> List[Dict[str, Any]]:
         List[Dict]: A list of insight dictionaries.
     """
     import numpy as np
-    import pandas as pd
     from scipy import stats
 
     insights = []

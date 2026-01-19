@@ -66,11 +66,29 @@ docdistillery summarize --input doc.pdf --llm cloud --model gpt-3.5-turbo
 #### 🚀 High Performance (16GB+ RAM / Apple Silicon)
 Leverage local power for maximum privacy and detail.
 ```bash
-# High Detail Local Summarization
+# High Detail Local Summarization (Private)
 docdistillery summarize --input large_doc.pdf --detail detailed --format pdf --out summary.pdf
 
 # Long Document Mode (using LED approximation via sliding window)
 docdistillery summarize --input book.pdf --detail detailed --strategy sequential
+```
+
+#### ☁️ Cloud / API First (Any Device)
+Best for users with OpenAI keys who want the highest possible quality without local resource usage.
+```bash
+# Summarize with GPT-4 (requires API key)
+export CLOUD_LLM_API_KEY="sk-..."
+docdistillery summarize --input complex_contract.pdf --llm cloud --model gpt-4 --detail detailed
+
+# Insight extraction from CSV
+docdistillery csv2story --input sales_data.csv --tone executive --out report.md
+```
+
+#### 🧪 Experimental / Custom Models
+For users who want to try specific HuggingFace models.
+```bash
+# Use a specific summarization model
+docdistillery summarize --input paper.pdf --model "philschmid/bart-large-cnn-samsum" --detail standard
 ```
 
 ---

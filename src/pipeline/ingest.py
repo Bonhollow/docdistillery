@@ -1,7 +1,10 @@
 import os
 import re
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 
 def extract_text_from_pdf(path: str) -> List[Dict[str, Any]]:

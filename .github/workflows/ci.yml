@@ -37,4 +37,4 @@ jobs:
         
     - name: Run tests with coverage
       run: |
-        pytest --cov=docdistillery tests/
+        pytest --cov=pipeline tests/

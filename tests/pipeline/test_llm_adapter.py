@@ -40,7 +40,8 @@ def test_cloud_adapter_payload(mock_post):
     assert payload["model"] == "test-model"
     assert payload["max_tokens"] == 50
     assert payload["temperature"] == 0.7
-    assert payload["messages"][0]["content"] == "Test prompt"
+    # System prompt is at index 0, User prompt at index 1
+    assert payload["messages"][1]["content"] == "Test prompt"
     assert kwargs["headers"]["Authorization"] == "Bearer test_key"
 
 
